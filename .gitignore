@@ -1,0 +1,5 @@
+CV_compact.txt
+*.db
+__pycache__/
+*.pyc
+.env
