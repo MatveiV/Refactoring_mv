@@ -1,0 +1,30 @@
+=== Testing API on http://localhost:8080 ===
+
+[PASS] POST /adduser  (valid name → 201)
+       HTTP 201  {"status": "ok", "id": 3, "name": "Alice"}
+
+[PASS] POST /adduser  (empty name → 400)
+       HTTP 400  {"error": "name is required and must be a non-empty string"}
+
+[PASS] POST /adduser  (missing name → 400)
+       HTTP 400  {"error": "name is required and must be a non-empty string"}
+
+[PASS] GET  /user/3  (found → 200)
+       HTTP 200  {"id": 3, "name": "Alice"}
+
+[PASS] GET  /user/99999  (not found → 404)
+       HTTP 404  {"error": "not_found"}
+
+[PASS] GET  /activate/3  (→ 200)
+       HTTP 200  {"active": [1, 1, 2, 2, 3], "status": "ok"}
+
+[PASS] POST /activate/3  (→ 200)
+       HTTP 200  {"active": [1, 2, 2, 3, 3], "status": "ok"}
+
+[PASS] GET  /slow  (→ 202)
+       HTTP 202  {"status": "scheduled"}
+
+[PASS] GET  /wrong  (→ 500)
+       HTTP 500  {"detail": "division by zero", "msg": "error"}
+
+Results: 9 passed, 0 failed

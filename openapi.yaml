@@ -1,0 +1,348 @@
+openapi: 3.1.0
+
+info:
+  title: Demo User API
+  description: |
+    REST API для управления пользователями.
+    Реализован на Go (go_server) и Python/Flask (api.py).
+    Обеспечивает безопасную работу с SQLite, потокобезопасный доступ
+    к активным пользователям и корректную обработку ошибок.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Go-сервер (go_server)
+  - url: http://localhost:5000
+    description: Python/Flask-сервер (api.py)
+
+# ---------------------------------------------------------------------------
+# Reusable schemas
+# ---------------------------------------------------------------------------
+components:
+  schemas:
+
+    User:
+      type: object
+      description: Пользователь из базы данных.
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Alice
+
+    AddUserRequest:
+      type: object
+      description: Тело запроса для создания пользователя.
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          example: Alice
+
+    AddUserResponse:
+      type: object
+      description: Ответ на успешное создание пользователя.
+      required: [status, id, name]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+          example: ok
+        id:
+          type: integer
+          format: int64
+          example: 1
+        name:
+          type: string
+          example: Alice
+
+    ActivateResponse:
+      type: object
+      description: Ответ после активации пользователя.
+      required: [status, active]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+          example: ok
+        active:
+          type: array
+          description: Список ID последних активных пользователей (не более 5).
+          items:
+            type: integer
+            format: int64
+          example: [3, 4, 5, 6, 42]
+
+    ScheduledResponse:
+      type: object
+      description: Подтверждение постановки задачи в очередь.
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [scheduled]
+          example: scheduled
+
+    OkMessage:
+      type: object
+      description: Общий ответ об ошибке с деталями.
+      required: [msg, detail]
+      properties:
+        msg:
+          type: string
+          example: error
+        detail:
+          type: string
+          example: division by zero
+
+    Error:
+      type: object
+      description: Стандартный ответ об ошибке.
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: not_found
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+paths:
+
+  /adduser:
+    post:
+      summary: Создать пользователя
+      description: |
+        Создаёт нового пользователя в базе данных.
+        Имя не должно быть пустым или состоять только из пробелов.
+      operationId: addUser
+      tags: [Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddUserRequest'
+            example:
+              name: Alice
+      responses:
+        '201':
+          description: Пользователь успешно создан.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddUserResponse'
+              example:
+                status: ok
+                id: 1
+                name: Alice
+        '400':
+          description: Некорректное тело запроса — имя отсутствует или пустое.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: name is required and must be a non-empty string
+        '405':
+          description: Метод не разрешён.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: method not allowed
+        '500':
+          description: Внутренняя ошибка сервера (ошибка БД).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: db error
+
+  /user/{id}:
+    get:
+      summary: Получить пользователя по ID
+      description: Возвращает данные пользователя по его числовому идентификатору.
+      operationId: getUser
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Числовой идентификатор пользователя.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          example: 1
+      responses:
+        '200':
+          description: Пользователь найден.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              example:
+                id: 1
+                name: Alice
+        '400':
+          description: Параметр id не является целым числом.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: uid must be an integer
+        '404':
+          description: Пользователь не найден.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: not_found
+        '500':
+          description: Внутренняя ошибка сервера (ошибка БД).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: db error
+
+  /activate/{id}:
+    get:
+      summary: Активировать пользователя (GET)
+      description: |
+        Добавляет пользователя в in-memory список активных.
+        Список хранит не более 5 последних ID. Операция потокобезопасна.
+      operationId: activateUserGet
+      tags: [Active Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Числовой идентификатор пользователя для активации.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          example: 42
+      responses:
+        '200':
+          description: Пользователь активирован, возвращён текущий список активных.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivateResponse'
+              example:
+                status: ok
+                active: [3, 4, 5, 6, 42]
+        '400':
+          description: Параметр id не является целым числом.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: uid must be an integer
+        '405':
+          description: Метод не разрешён.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: method not allowed
+
+    post:
+      summary: Активировать пользователя (POST)
+      description: Аналогично GET /activate/{id} — принимает оба метода.
+      operationId: activateUserPost
+      tags: [Active Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Числовой идентификатор пользователя для активации.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          example: 42
+      responses:
+        '200':
+          description: Пользователь активирован, возвращён текущий список активных.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivateResponse'
+              example:
+                status: ok
+                active: [3, 4, 5, 6, 42]
+        '400':
+          description: Параметр id не является целым числом.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: uid must be an integer
+
+  /slow:
+    get:
+      summary: Запустить тяжёлую задачу в фоне
+      description: |
+        Запускает долгую операцию (5 секунд) в фоновом потоке/горутине
+        и немедленно возвращает ответ 202, не блокируя сервер.
+      operationId: slowTask
+      tags: [Tasks]
+      responses:
+        '202':
+          description: Задача поставлена в очередь.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledResponse'
+              example:
+                status: scheduled
+
+  /wrong:
+    get:
+      summary: Демонстрация обработки ошибки
+      description: |
+        Эндпоинт намеренно вызывает ошибку деления на ноль
+        и возвращает корректный JSON-ответ вместо паники или пустого тела.
+        Используется для демонстрации паттерна обработки ошибок.
+      operationId: wrongEndpoint
+      tags: [Demo]
+      responses:
+        '500':
+          description: Обработанная ошибка деления на ноль.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkMessage'
+              example:
+                msg: error
+                detail: division by zero
+
+# ---------------------------------------------------------------------------
+# Tags
+# ---------------------------------------------------------------------------
+tags:
+  - name: Users
+    description: Создание и получение пользователей.
+  - name: Active Users
+    description: Управление списком активных пользователей (in-memory, потокобезопасно).
+  - name: Tasks
+    description: Фоновые задачи.
+  - name: Demo
+    description: Демонстрационные эндпоинты.

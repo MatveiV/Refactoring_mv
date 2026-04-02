@@ -1,0 +1,23 @@
+services:
+
+  python-api:
+    image: matveiv25/refactoring_mv:python-api
+    container_name: demo-python-api
+    ports:
+      - "5000:5000"
+    volumes:
+      - python-db:/app
+    restart: unless-stopped
+
+  go-api:
+    image: matveiv25/refactoring_mv:go-server
+    container_name: demo-go-api
+    ports:
+      - "8080:8080"
+    volumes:
+      - go-db:/app
+    restart: unless-stopped
+
+volumes:
+  python-db:
+  go-db:
